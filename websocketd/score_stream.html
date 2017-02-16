@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>websocketd score stream example</title>
+  </head>
+  <body>
+    <script src="http://d3js.org/d3.v3.js"></script>
+    <script>
+      var h = 480;
+      var w = 480;
+      var circs = [1];
+
+      var svg = d3.select('body').append('svg').attr('width',w).attr('height',h);
+      var elem = svg.selectAll("g").data(circs)
+      var elemEnter = elem.enter().append("g")
+
+      var circles = elemEnter.append('circle')
+         .style("stroke", "green")
+         .style("fill", "white")
+         .attr('opacity',0.3)
+         .attr('r',function(d){return d})
+         .attr('class','circles')
+         .attr('cy',h/2)
+         .attr('cx',w/2)
+      var texts = elemEnter.append("text").attr("x",w/2).attr("y",h/2).text(function(d){return d})
+
+      var ws = new WebSocket('ws://server1635v:8080/');
+      ws.onopen = function() {
+        document.body.style.backgroundColor = '#cfc';
+      };
+      ws.onclose = function() {
+        document.body.style.backgroundColor = null;
+      };
+      ws.onmessage = function(event) {
+        var event_data = event.data.split(",");
+        var new_radius = event_data[event_data.length-1]
+        console.log(event.data);
+        if(event.data.length>0){
+          circles.transition().duration(100).attr('r',new_radius);
+          texts.text(event.data);
+        }
+      };
+    </script>
+  </body>
+</html>

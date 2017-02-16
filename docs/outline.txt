@@ -1,0 +1,181 @@
+Introduction to Spark
+
+Agenda:
+  Basics of scalable data processing
+  Understanding Spark Api from the data type angle
+  Practical example utilizing Spark Api
+
+  Objective: 
+      Students walk away with confidence how Spark can be used in real life applications
+
+  Prerequisites: 
+      no prior Spark knowledge is assumed
+      at least either one scripting or compiled language
+
+1 Basics of scalable data processing
+
+  data collections
+    Array, List, Map (Dictionary), Queue, Stack ... and most recently RDDs
+  immutable data, no side effect
+    a function relate to outside world through its parameters and/or reference to other objects inside it's body
+    in functional program, we do not change (variables or objects in) outside world, instead, we create a new object (think we are not modifiers but creators) 
+    because more and more people are writing distributed programs where an object can be accessed by separate threads later on
+    it requires thread communication if we want to maintain thread safety (objects being accessed at the right time when we want it to be accessed)
+    thead communication is not only costly but too complex, (thinking about thousands of threads)
+    hence we prefer object is what it is when it is created, it's a snapshot of an object during its life cycle
+      imagine you can go back to 1995 without traceback how you go from 1995 to 2016 but just go back to 1995 
+  functional programs
+    is not merely program written by a collection of functions, a functional program can be object oriented and mostly will be object oriented
+    a functional program is a program written according to the functional principles:
+      1: passing immutable variables around and has no side effect to outside world (pure functions) (we are rest assured we can go back to 1995 and it will be that 1995 we had been)
+      2: functions are first class value, meaning functions can be passed into or returned from another function
+         when passing function as parameter, we send behavior around to process data
+         when return function as a result, we can build a function dynamically (an example is a closure, or a function decorator)
+      3: no loops (which uses a index), instead, we declaratively tell what we want to do to each element in the collection 
+           (imperative vs declarative is a habit of writing programs)
+           val (boys, girls) = students.partition(_.sex)
+           this is actually a level of abstraction build around loop, the collection class of students implement partition using a loop
+           this abstraction of the collection class which provides functionalities such as map (and some others to not to confuse you) is called Monads, other monads Option, Try, Future
+
+   suggestions to start writing programs in a functional way:
+      1: when you start to loop, stop!!!
+      2: when you try to assign a value to a variable aside from object construction, stop!!
+      3: when your function spills over the screen, stop!
+ 
+  2 most important patterns: 
+
+    map reduce:
+       an idea in functional programming way before hadoop (R map reduce function and lapply, sapply)
+       transform and action 
+       example: for everybody in the classroom, raiseup you hand if you have a question, and count the number of hands
+                students.map(_.numhandsup).reduce(_+_)                                       gives 2
+    group agg:
+       sql groupby, R ddply aggregate etc, pandas group
+       example: for everybody of different gender in the classroom, raiseup you hand if you have a question, and count the number of hands in each gender group
+                students.groupByKey(_.gender).map(_(2).map(numhandsup).reduce(_+_))          gives Array((male,2),(female,0))
+                students.group(_.gender).agg(sum)
+
+  comparison of common data science languages: R/Python/Scala
+
+                          R           Python         Scala
+    object-oriented       Y-          Y              Y
+    typing                Dynamic     Dynamic        Static
+    parallel              Process     Threading      Threading
+    incline               Statistics  Software       BigData
+    prototyping           Quick       Quick          Quick-
+    graphics              *****ggplot **matplotlib   *breeze-viz
+    spark support         *           **             *****
+
+  Timing performance of parallel processing for small data, long process
+
+    def time[R](block: => R): R = {  
+      val t0 = System.currentTimeMillis
+      val result = block    // call-by-name
+      val t1 = System.currentTimeMillis
+      println("Elapsed time: " + (t1 - t0) + "ms")
+      result
+    }
+
+    distributed processing over cpu - .par
+       time {(1 to 1000).map(_+1)}
+       time {(1 to 1000).par.map(_+1)}
+
+    distributed processing over cluster - spark
+       time {sc.parallelize(1 to 1000).map(_+1).collect}
+
+    distributed processing over cpu - .par
+       time {(1 to 1000).map(x=>{Thread.sleep(1);x+1})}
+       time {(1 to 1000).par.map(x=>{Thread.sleep(1);x+1})}
+
+    distributed processing over cluster - spark
+       time {sc.parallelize(1 to 1000).map(x=>{Thread.sleep(1);x+1}).collect}
+
+2 Setting up for examples
+  batch data: batch dataset
+
+    prepare some data:
+
+> schools<-c("Beijing No 4 Middle School","Hangzhou Xuejun Middle School","Jingling High School","Shanghai High School","Shenzhen International Exchange School","Andover Regional High School","Newton South High School","Phillips Academy","Action Boxborough Regional High School","Woburn Regional High School")
+> subjects<-c("English","Math","Physical Education","Science","History")
+> studentids<-1:100
+> genders<-c("Male","Female")
+> df<-expand.grid(schools,subjects,studentids)
+> head(df)
+                                    Var1    Var2 Var3
+1             Beijing No 4 Middle School English    1
+2          Hangzhou Xuejun Middle School English    1
+3                   Jingling High School English    1
+4                   Shanghai High School English    1
+5 Shenzhen International Exchange School English    1
+6           Andover Regional High School English    1
+
+> names(df)<-c("School","Subject","StudentID")
+> df$Gender<-ifelse(df$StudentID<=50,"Male","Female")
+> df$Country<-ifelse(sapply(df$School,function(s){which(schools==s)})<=5,"China","USA")
+> randomscores_china <- c(rnorm(100,70,10),rnorm(10,60,20),rnorm(10,90,5))
+> randomscores_usa <- c(rnorm(100,60,15),rnorm(10,50,30),rnorm(5,95,5))
+> df$Score<-sapply(1:nrow(df),function(i){ifelse(df[i,]$Country=="USA",sample(randomscores_usa,1),sample(randomscores_china,1))})
+> df$Score[df$Country=="USA" & df$Subject=="Physical Education"]<-df$Score[df$Country=="USA" & df$Subject=="Physical Education"]*1.1
+> df$Score[df$Country=="China" & df$Subject=="Math"]<-df$Score[df$Country=="China" & df$Subject=="Math"]*1.1
+> df$Score[df$Score>100]<-100
+> df$Score[df$Score<0]<-2
+> df$Score<-round(df$Score,0)
+> write.csv(df,"scores.csv",row.names=FALSE)
+
+                                  School Subject StudentID Gender Country Score
+1             Beijing No 4 Middle School English         1   Male   China    84
+2          Hangzhou Xuejun Middle School English         1   Male   China    46
+3                   Jingling High School English         1   Male   China    60
+4                   Shanghai High School English         1   Male   China    69
+5 Shenzhen International Exchange School English         1   Male   China    78
+6           Andover Regional High School English         1   Male     USA    60
+
+We know following about the data set:
+
+US students are better at Physical Education
+Chinese students are better at Math
+Bad US students tend to be worse than Chinese bad students
+Good students tend to be better than Chinese good students
+US has less good students than China
+Chinese normal students are better than US normal students
+
+Let's see if we can find these info from the data using Spark.
+
+
+
+  streaming data: a simple python file streamifier
+  tools: spark and zeppelin
+
+3 Spark batch processing
+
+  key idea behind spark RDD 
+    laziness
+    still a collection
+  RDDs of simple types:
+    data transformations (lazily create new RDD) - map,filter,flatMap,distinct
+    data actions (create scala collection) - take,count,collect,countByValue,reduce,aggregate
+  RDDs of key value pair type:
+    data transformations (lazily create new RDD) - mapValues, groupByKey, reduceByKey, keys, values
+    data merge - join, leftOuterJoin, rightOuterJoin
+
+4 Spark streaming
+
+  DStream is a continuous series of RDD
+    Each batch interval correspond to one RDD
+    Operations to DStream translates to operations on underlying RDD
+    window length and slide interval vs batch interval
+  DStream of RDD of simple type: (lazily return new DStream)
+    transformations of DStream - map,flatMap,filter,count,reduce,countByValue,reduceByKey
+  DStream of RDD of key value pair type: (lazily return new DStream)
+    transformations of DStream  - reduceByKey
+    data merge - join
+    transform - arbitrary RDD operation
+    updateStateByKey - continuously update a state when new information comes in
+  Window Operations of simple types: (window length, slide interval) (lazily return new DStream)
+    countByWindow, reduceByWindow, 
+  Window Operations of key valeu pairs type: (window length, slide interval) (lazily return new DStream)
+    reduceByKeyAndWindow, countByValueAndWindow
+  Output Operation: (like actions of RDD, often force execution of RDD)
+    print, saveAsTextFiles, foreachRDD(runs on the driver)
+
+4 Puting it all together
